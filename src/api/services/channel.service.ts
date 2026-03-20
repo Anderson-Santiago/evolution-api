@@ -746,14 +746,6 @@ export class ChannelStartupService {
         : createJid(query.where?.remoteJid)
       : null;
 
-    const where = {
-      instanceId: this.instanceId,
-    };
-
-    if (remoteJid) {
-      where['remoteJid'] = remoteJid;
-    }
-
     const timestampFilter =
       query?.where?.messageTimestamp?.gte && query?.where?.messageTimestamp?.lte
         ? Prisma.sql`
@@ -764,13 +756,16 @@ export class ChannelStartupService {
     const limit = query?.take ? Prisma.sql`LIMIT ${query.take}` : Prisma.sql``;
     const offset = query?.skip ? Prisma.sql`OFFSET ${query.skip}` : Prisma.sql``;
 
+    // resolvedJid: for @lid messages that carry remoteJidAlt, use it to group
+    // the chat under the phone-based JID instead of creating a duplicate entry.
     const results = await this.prismaRepository.$queryRaw`
       WITH rankedMessages AS (
-        SELECT DISTINCT ON ("Message"."key"->>'remoteJid') 
+        SELECT DISTINCT ON (COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid'))
           "Contact"."id" as "contactId",
-          "Message"."key"->>'remoteJid' as "remoteJid",
+          COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid') as "remoteJid",
           CASE 
-            WHEN "Message"."key"->>'remoteJid' LIKE '%@g.us' THEN COALESCE("Chat"."name", "Contact"."pushName")
+            WHEN COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid') LIKE '%@g.us'
+              THEN COALESCE("Chat"."name", "Contact"."pushName")
             ELSE COALESCE("Contact"."pushName", "Message"."pushName")
           END as "pushName",
           "Contact"."profilePicUrl",
@@ -778,7 +773,7 @@ export class ChannelStartupService {
             to_timestamp("Message"."messageTimestamp"::double precision), 
             "Contact"."updatedAt"
           ) as "updatedAt",
-          "Chat"."name" as "pushName",
+          "Chat"."name" as "chatName",
           "Chat"."createdAt" as "windowStart",
           "Chat"."createdAt" + INTERVAL '24 hours' as "windowExpires",
           "Chat"."unreadMessages" as "unreadMessages",
@@ -799,12 +794,16 @@ export class ChannelStartupService {
           "Message"."sessionId" AS "lastMessageSessionId",
           "Message"."status" AS "lastMessageStatus"
         FROM "Message"
-        LEFT JOIN "Contact" ON "Contact"."remoteJid" = "Message"."key"->>'remoteJid' AND "Contact"."instanceId" = "Message"."instanceId"
-        LEFT JOIN "Chat" ON "Chat"."remoteJid" = "Message"."key"->>'remoteJid' AND "Chat"."instanceId" = "Message"."instanceId"
+        LEFT JOIN "Contact"
+          ON "Contact"."remoteJid" = COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid')
+          AND "Contact"."instanceId" = "Message"."instanceId"
+        LEFT JOIN "Chat"
+          ON "Chat"."remoteJid" = COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid')
+          AND "Chat"."instanceId" = "Message"."instanceId"
         WHERE "Message"."instanceId" = ${this.instanceId}
-        ${remoteJid ? Prisma.sql`AND "Message"."key"->>'remoteJid' = ${remoteJid}` : Prisma.sql``}
+        ${remoteJid ? Prisma.sql`AND COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid') = ${remoteJid}` : Prisma.sql``}
         ${timestampFilter}
-        ORDER BY "Message"."key"->>'remoteJid', "Message"."messageTimestamp" DESC
+        ORDER BY COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid'), "Message"."messageTimestamp" DESC
       )
       SELECT * FROM rankedMessages 
       ORDER BY "updatedAt" DESC NULLS LAST
