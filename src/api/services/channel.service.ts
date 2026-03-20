@@ -597,6 +597,29 @@ export class ChannelStartupService {
     return cleanedMessage;
   }
 
+  /**
+   * Build the remoteJid filter for message queries.
+   *
+   * When the caller passes a @s.whatsapp.net JID we also need to find messages
+   * stored under the corresponding @lid (Linked ID) JID that WhatsApp Multi-Device
+   * may have used.  Messages saved with @lid carry their phone-based JID in
+   * key.remoteJidAlt, so we use an OR condition:
+   *
+   *   key.remoteJid = requestedJid              (normal match)
+   *   OR key.remoteJidAlt = requestedJid         (@lid messages whose alt matches)
+   *
+   * This transparently returns all messages for a phone number regardless of
+   * whether they were stored with @s.whatsapp.net or @lid as remoteJid.
+   */
+  private buildRemoteJidFilter(remoteJid: string): object {
+    return {
+      OR: [
+        { key: { path: ['remoteJid'], equals: remoteJid } },
+        { key: { path: ['remoteJidAlt'], equals: remoteJid } },
+      ],
+    };
+  }
+
   public async fetchMessages(query: Query<Message>) {
     const keyFilters = query?.where?.key as {
       id?: string;
@@ -625,7 +648,7 @@ export class ChannelStartupService {
         AND: [
           keyFilters?.id ? { key: { path: ['id'], equals: keyFilters?.id } } : {},
           keyFilters?.fromMe ? { key: { path: ['fromMe'], equals: keyFilters?.fromMe } } : {},
-          keyFilters?.remoteJid ? { key: { path: ['remoteJid'], equals: keyFilters?.remoteJid } } : {},
+          keyFilters?.remoteJid ? this.buildRemoteJidFilter(keyFilters.remoteJid) : {},
           keyFilters?.participants ? { key: { path: ['participants'], equals: keyFilters?.participants } } : {},
         ],
       },
@@ -649,7 +672,7 @@ export class ChannelStartupService {
         AND: [
           keyFilters?.id ? { key: { path: ['id'], equals: keyFilters?.id } } : {},
           keyFilters?.fromMe ? { key: { path: ['fromMe'], equals: keyFilters?.fromMe } } : {},
-          keyFilters?.remoteJid ? { key: { path: ['remoteJid'], equals: keyFilters?.remoteJid } } : {},
+          keyFilters?.remoteJid ? this.buildRemoteJidFilter(keyFilters.remoteJid) : {},
           keyFilters?.participants ? { key: { path: ['participants'], equals: keyFilters?.participants } } : {},
         ],
       },
