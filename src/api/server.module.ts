@@ -47,7 +47,7 @@ import { TemplateService } from './services/template.service';
 
 const logger = new Logger('WA MODULE');
 
-let chatwootCache: CacheService = null;
+let chatwootCache: CacheService = new CacheService(null);
 if (configService.get<Chatwoot>('CHATWOOT').ENABLED) {
   chatwootCache = new CacheService(new CacheEngine(configService, ChatwootService.name).getEngine());
 }

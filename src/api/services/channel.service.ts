@@ -27,7 +27,17 @@ export class ChannelStartupService {
     public readonly eventEmitter: EventEmitter2,
     public readonly prismaRepository: PrismaRepository,
     public readonly chatwootCache: CacheService,
-  ) {}
+  ) {
+    // Service initialization must happen inside the constructor body (not as
+    // class field initializers) because tsup/esbuild compiles field initializers
+    // to run BEFORE constructor parameter properties are assigned.  That caused
+    // `this.configService` to be `undefined` at the time ChatwootService /
+    // OpenaiService / etc. were instantiated.
+    this.chatwootService = new ChatwootService(waMonitor, this.configService, this.prismaRepository, this.chatwootCache);
+    this.openaiService = new OpenaiService(waMonitor, this.prismaRepository, this.configService);
+    this.typebotService = new TypebotService(waMonitor, this.configService, this.prismaRepository, this.openaiService);
+    this.difyService = new DifyService(waMonitor, this.prismaRepository, this.configService, this.openaiService);
+  }
 
   public readonly logger = new Logger('ChannelStartupService');
 
@@ -38,18 +48,13 @@ export class ChannelStartupService {
   public readonly localSettings: wa.LocalSettings = {};
   public readonly localWebhook: wa.LocalWebHook = {};
 
-  public chatwootService = new ChatwootService(
-    waMonitor,
-    this.configService,
-    this.prismaRepository,
-    this.chatwootCache,
-  );
+  public chatwootService: ChatwootService;
 
-  public openaiService = new OpenaiService(waMonitor, this.prismaRepository, this.configService);
+  public openaiService: OpenaiService;
 
-  public typebotService = new TypebotService(waMonitor, this.configService, this.prismaRepository, this.openaiService);
+  public typebotService: TypebotService;
 
-  public difyService = new DifyService(waMonitor, this.prismaRepository, this.configService, this.openaiService);
+  public difyService: DifyService;
 
   public setInstance(instance: InstanceDto) {
     this.logger.setInstance(instance.instanceName);
