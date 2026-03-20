@@ -1,0 +1,37 @@
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  Override: deploy local (ConversaFlow)                     ║
+# ║                                                            ║
+# ║  - Build da imagem a partir do fork local (fix @lid)       ║
+# ║  - Remove dokploy-network (nao existe no nosso deploy)     ║
+# ║  - Usa .env gerado a partir do conversaflow-api/.env.prod  ║
+# ║                                                            ║
+# ║  Uso:                                                      ║
+# ║    docker compose up -d --build                            ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+services:
+  api:
+    image: conversaflow/evolution-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+    networks:
+      - evolution-net
+    # Remove dokploy-network do servico api
+
+  redis:
+    networks:
+      evolution-net:
+        aliases:
+          - evolution-redis
+    # Remove dokploy-network do servico redis
+
+  evolution-postgres:
+    networks:
+      - evolution-net
+    # Remove dokploy-network do servico postgres
+
+networks:
+  dokploy-network:
+    driver: bridge
+    # Redefine como local em vez de external para evitar erro
