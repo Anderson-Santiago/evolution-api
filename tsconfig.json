@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "useDefineForClassFields": false,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "declaration": true,
