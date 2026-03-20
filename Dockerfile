@@ -13,7 +13,7 @@ COPY ./package*.json ./
 COPY ./tsconfig.json ./
 COPY ./tsup.config.ts ./
 
-RUN npm ci --silent
+RUN npm ci --silent && npm install --save-dev @swc/core
 
 COPY ./src ./src
 COPY ./public ./public
@@ -28,7 +28,9 @@ RUN chmod +x ./Docker/scripts/* && dos2unix ./Docker/scripts/*
 
 RUN ./Docker/scripts/generate_database.sh
 
-RUN npm run build
+# Build with reduced memory: CJS only, no sourcemaps, no minify, with @swc/core
+RUN NODE_OPTIONS="--max-old-space-size=4096" npx tsup src --out-dir dist --format cjs --no-sourcemap --no-clean \
+    && cp -r src/utils/translations dist/translations
 
 FROM node:24-alpine AS final
 
