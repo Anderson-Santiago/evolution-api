@@ -1,20 +1,17 @@
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  Override: deploy local (ConversaFlow)                     ║
+# ║  Override: deploy ConversaFlow                             ║
 # ║                                                            ║
-# ║  - Build da imagem a partir do fork local (fix @lid)       ║
+# ║  - Usa imagem pre-built do GHCR (fix @lid)                ║
 # ║  - Remove dokploy-network (nao existe no nosso deploy)     ║
 # ║  - Usa .env gerado a partir do conversaflow-api/.env.prod  ║
 # ║                                                            ║
 # ║  Uso:                                                      ║
-# ║    docker compose up -d --build                            ║
+# ║    docker compose up -d                                    ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 services:
   api:
-    image: conversaflow/evolution-api:local
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/anderson-santiago/evolution-api:latest
     networks:
       - evolution-net
     # Remove dokploy-network do servico api
