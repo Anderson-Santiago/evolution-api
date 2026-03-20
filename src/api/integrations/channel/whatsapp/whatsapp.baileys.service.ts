@@ -243,13 +243,18 @@ export class BaileysStartupService extends ChannelStartupService {
     });
 
     this.authStateProvider = new AuthStateProvider(this.providerFiles);
+
+    // logBaileys must be initialized here (not as a field initializer) because
+    // esbuild/tsup may reorder field initializers before constructor parameter
+    // assignments, causing this.configService to be undefined.
+    this.logBaileys = this.configService.get<Log>('LOG').BAILEYS;
   }
 
   private authStateProvider: AuthStateProvider;
   private readonly msgRetryCounterCache: CacheStore = new NodeCache();
   private readonly userDevicesCache: CacheStore = new NodeCache({ stdTTL: 300000, useClones: false });
   private endSession = false;
-  private logBaileys = this.configService.get<Log>('LOG').BAILEYS;
+  private logBaileys: string;
   private eventProcessingQueue: Promise<void> = Promise.resolve();
 
   // Cache TTL constants (in seconds)
