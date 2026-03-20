@@ -30,5 +30,6 @@ services:
 
 networks:
   dokploy-network:
+    external: false
     driver: bridge
-    # Redefine como local em vez de external para evitar erro
+    name: dokploy-network-local
