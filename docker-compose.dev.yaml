@@ -1,6 +1,6 @@
 services:
   api:
-    container_name: evolution_api
+    container_name: evolution-api
     image: evolution/api:local
     build: .
     restart: always
