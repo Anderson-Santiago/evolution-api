@@ -5031,6 +5031,22 @@ export class BaileysStartupService extends ChannelStartupService {
       }
     }
 
+    const remoteJidFilter = keyFilters?.remoteJid
+      ? {
+          OR: [
+            { key: { path: ['remoteJid'], equals: keyFilters.remoteJid } },
+            { key: { path: ['remoteJidAlt'], equals: keyFilters.remoteJid } },
+          ],
+        }
+      : keyFilters?.remoteJidAlt
+        ? {
+            OR: [
+              { key: { path: ['remoteJid'], equals: keyFilters.remoteJidAlt } },
+              { key: { path: ['remoteJidAlt'], equals: keyFilters.remoteJidAlt } },
+            ],
+          }
+        : {};
+
     const count = await this.prismaRepository.message.count({
       where: {
         instanceId: this.instanceId,
@@ -5042,12 +5058,7 @@ export class BaileysStartupService extends ChannelStartupService {
           keyFilters?.id ? { key: { path: ['id'], equals: keyFilters?.id } } : {},
           keyFilters?.fromMe ? { key: { path: ['fromMe'], equals: keyFilters?.fromMe } } : {},
           keyFilters?.participant ? { key: { path: ['participant'], equals: keyFilters?.participant } } : {},
-          {
-            OR: [
-              keyFilters?.remoteJid ? { key: { path: ['remoteJid'], equals: keyFilters?.remoteJid } } : {},
-              keyFilters?.remoteJidAlt ? { key: { path: ['remoteJidAlt'], equals: keyFilters?.remoteJidAlt } } : {},
-            ],
-          },
+          remoteJidFilter,
         ],
       },
     });
@@ -5071,12 +5082,7 @@ export class BaileysStartupService extends ChannelStartupService {
           keyFilters?.id ? { key: { path: ['id'], equals: keyFilters?.id } } : {},
           keyFilters?.fromMe ? { key: { path: ['fromMe'], equals: keyFilters?.fromMe } } : {},
           keyFilters?.participant ? { key: { path: ['participant'], equals: keyFilters?.participant } } : {},
-          {
-            OR: [
-              keyFilters?.remoteJid ? { key: { path: ['remoteJid'], equals: keyFilters?.remoteJid } } : {},
-              keyFilters?.remoteJidAlt ? { key: { path: ['remoteJidAlt'], equals: keyFilters?.remoteJidAlt } } : {},
-            ],
-          },
+          remoteJidFilter,
         ],
       },
       orderBy: { messageTimestamp: 'desc' },
