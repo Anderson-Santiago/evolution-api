@@ -1,9 +1,9 @@
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  Override: deploy ConversaFlow                             ║
+# ║  Override: deploy Convecta AI                              ║
 # ║                                                            ║
 # ║  - Usa imagem pre-built do GHCR (fix @lid)                ║
 # ║  - Remove dokploy-network (nao existe no nosso deploy)     ║
-# ║  - Usa .env gerado a partir do conversaflow-api/.env.prod  ║
+# ║  - Usa .env gerado a partir do convectaai-api/.env.prod    ║
 # ║                                                            ║
 # ║  Uso:                                                      ║
 # ║    docker compose up -d                                    ║
