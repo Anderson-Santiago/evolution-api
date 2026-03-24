@@ -817,7 +817,40 @@ export class ChannelStartupService {
     `;
 
     if (results && isArray(results) && results.length > 0) {
-      const mappedResults = results.map((contact) => {
+      // Resolve @lid JIDs to phone numbers using Baileys LID mapping.
+      // When WhatsApp Multi-Device sends messages with @lid identifiers and
+      // no remoteJidAlt, the COALESCE in SQL falls back to the @lid value.
+      // We use the Baileys signal repository to convert these to real numbers.
+      const lidMapping = this.client?.signalRepository?.lidMapping;
+      const lidContacts = results.filter((c) => String(c.remoteJid).includes('@lid'));
+
+      if (lidContacts.length > 0 && lidMapping?.getPNForLID) {
+        const resolvePromises = lidContacts.map(async (contact) => {
+          try {
+            const resolved = await lidMapping.getPNForLID(contact.remoteJid as string);
+            if (resolved && !resolved.includes('@lid')) {
+              contact.remoteJid = resolved;
+            }
+          } catch (err) {
+            this.logger.warn(`fetchChats: failed to resolve LID ${contact.remoteJid}: ${err?.message}`);
+          }
+        });
+        await Promise.allSettled(resolvePromises);
+      }
+
+      // Deduplicate: after LID resolution, multiple entries may map to the same
+      // phone JID. Keep only the one with the most recent updatedAt.
+      const deduped = new Map<string, (typeof results)[number]>();
+      for (const contact of results) {
+        const jid = String(contact.remoteJid);
+        const existing = deduped.get(jid);
+        if (!existing || (contact.updatedAt && (!existing.updatedAt || contact.updatedAt > existing.updatedAt))) {
+          deduped.set(jid, contact);
+        }
+      }
+      const uniqueResults = [...deduped.values()];
+
+      const mappedResults = uniqueResults.map((contact) => {
         const lastMessage = contact.lastMessageId
           ? {
               id: contact.lastMessageId,
