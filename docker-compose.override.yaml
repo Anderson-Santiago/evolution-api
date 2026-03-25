@@ -4,6 +4,7 @@
 # ║  - Usa imagem pre-built do GHCR (fix @lid)                ║
 # ║  - Remove dokploy-network (nao existe no nosso deploy)     ║
 # ║  - Usa .env gerado a partir do convectaai-api/.env.prod    ║
+# ║  - Configura MinIO como object storage (S3)                ║
 # ║                                                            ║
 # ║  Uso:                                                      ║
 # ║    docker compose up -d                                    ║
@@ -15,6 +16,18 @@ services:
     networks:
       - evolution-net
     # Remove dokploy-network do servico api
+    environment:
+      # ── MinIO / S3 (object storage para midias) ──
+      S3_ENABLED: "true"
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER:-convectaai}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-convectaai2026}
+      S3_BUCKET: evolution
+      S3_PORT: "9000"
+      S3_ENDPOINT: convectaai-minio
+      S3_REGION: us-east-1
+      S3_USE_SSL: "false"
+      S3_SKIP_POLICY: "false"
+      S3_SAVE_VIDEO: "true"
 
   redis:
     networks:

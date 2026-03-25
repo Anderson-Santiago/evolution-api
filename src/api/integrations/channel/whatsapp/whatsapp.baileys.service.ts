@@ -813,12 +813,32 @@ export class BaileysStartupService extends ChannelStartupService {
   private readonly contactHandle = {
     'contacts.upsert': async (contacts: Contact[]) => {
       try {
-        const contactsRaw: any = contacts.map((contact) => ({
-          remoteJid: contact.id,
-          pushName: contact?.name || contact?.verifiedName || contact.id.split('@')[0],
-          profilePicUrl: null,
-          instanceId: this.instanceId,
-        }));
+        // Resolve @lid → @s.whatsapp.net using Baileys LID mapping before saving contacts
+        const lidMapping = this.client?.signalRepository?.lidMapping;
+
+        const contactsRaw: any = await Promise.all(
+          contacts.map(async (contact) => {
+            let remoteJid = contact.id;
+
+            if (remoteJid?.includes('@lid') && lidMapping?.getPNForLID) {
+              try {
+                const resolved = await lidMapping.getPNForLID(remoteJid);
+                if (resolved && !resolved.includes('@lid')) {
+                  remoteJid = resolved;
+                }
+              } catch {
+                // Keep original @lid if resolution fails
+              }
+            }
+
+            return {
+              remoteJid,
+              pushName: contact?.name || contact?.verifiedName || remoteJid.split('@')[0],
+              profilePicUrl: null,
+              instanceId: this.instanceId,
+            };
+          }),
+        );
 
         if (contactsRaw.length > 0) {
           this.sendDataWebhook(Events.CONTACTS_UPSERT, contactsRaw);
@@ -826,7 +846,9 @@ export class BaileysStartupService extends ChannelStartupService {
           if (this.configService.get<Database>('DATABASE').SAVE_DATA.CONTACTS)
             await this.prismaRepository.contact.createMany({ data: contactsRaw, skipDuplicates: true });
 
-          const usersContacts = contactsRaw.filter((c) => c.remoteJid.includes('@s.whatsapp'));
+          const usersContacts = contactsRaw.filter(
+            (c) => c.remoteJid.includes('@s.whatsapp') || c.remoteJid.includes('@lid'),
+          );
           if (usersContacts) {
             await saveOnWhatsappCache(usersContacts.map((c) => ({ remoteJid: c.remoteJid })));
           }
@@ -849,16 +871,33 @@ export class BaileysStartupService extends ChannelStartupService {
         }
 
         const updatedContacts = await Promise.all(
-          contacts.map(async (contact) => ({
-            remoteJid: contact.id,
-            pushName: contact?.name || contact?.verifiedName || contact.id.split('@')[0],
-            profilePicUrl: (await this.profilePicture(contact.id)).profilePictureUrl,
-            instanceId: this.instanceId,
-          })),
+          contacts.map(async (contact) => {
+            let remoteJid = contact.id;
+
+            if (remoteJid?.includes('@lid') && lidMapping?.getPNForLID) {
+              try {
+                const resolved = await lidMapping.getPNForLID(remoteJid);
+                if (resolved && !resolved.includes('@lid')) {
+                  remoteJid = resolved;
+                }
+              } catch {
+                // Keep original @lid if resolution fails
+              }
+            }
+
+            return {
+              remoteJid,
+              pushName: contact?.name || contact?.verifiedName || remoteJid.split('@')[0],
+              profilePicUrl: (await this.profilePicture(contact.id)).profilePictureUrl,
+              instanceId: this.instanceId,
+            };
+          }),
         );
 
         if (updatedContacts.length > 0) {
-          const usersContacts = updatedContacts.filter((c) => c.remoteJid.includes('@s.whatsapp'));
+          const usersContacts = updatedContacts.filter(
+            (c) => c.remoteJid.includes('@s.whatsapp') || c.remoteJid.includes('@lid'),
+          );
           if (usersContacts) {
             await saveOnWhatsappCache(usersContacts.map((c) => ({ remoteJid: c.remoteJid })));
           }
@@ -986,12 +1025,28 @@ export class BaileysStartupService extends ChannelStartupService {
           ),
         );
 
+        // Resolve @lid → @s.whatsapp.net using Baileys LID mapping before saving
+        const lidMapping = this.client?.signalRepository?.lidMapping;
+
         for (const chat of chats) {
-          if (chatsRepository?.has(chat.id)) {
+          let remoteJid = chat.id;
+
+          if (remoteJid?.includes('@lid') && lidMapping?.getPNForLID) {
+            try {
+              const resolved = await lidMapping.getPNForLID(remoteJid);
+              if (resolved && !resolved.includes('@lid')) {
+                remoteJid = resolved;
+              }
+            } catch (err) {
+              this.logger.warn(`messaging-history.set: failed to resolve LID for chat ${remoteJid}: ${err?.message}`);
+            }
+          }
+
+          if (chatsRepository?.has(remoteJid)) {
             continue;
           }
 
-          chatsRaw.push({ remoteJid: chat.id, instanceId: this.instanceId, name: chat.name });
+          chatsRaw.push({ remoteJid, instanceId: this.instanceId, name: chat.name });
         }
 
         this.sendDataWebhook(Events.CHATS_SET, chatsRaw);
@@ -1037,6 +1092,18 @@ export class BaileysStartupService extends ChannelStartupService {
 
           if (messagesRepository?.has(m.key.id)) {
             continue;
+          }
+
+          // Resolve @lid → @s.whatsapp.net for historic messages that lack remoteJidAlt
+          if (m.key.remoteJid?.includes('@lid') && !(m.key as any).remoteJidAlt && lidMapping?.getPNForLID) {
+            try {
+              const resolved = await lidMapping.getPNForLID(m.key.remoteJid);
+              if (resolved && !resolved.includes('@lid')) {
+                (m.key as any).remoteJidAlt = resolved;
+              }
+            } catch (err) {
+              this.logger.warn(`messaging-history.set: failed to resolve LID for message ${m.key.remoteJid}: ${err?.message}`);
+            }
           }
 
           if (!m.pushName && !m.key.fromMe) {

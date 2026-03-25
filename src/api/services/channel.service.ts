@@ -763,26 +763,28 @@ export class ChannelStartupService {
 
     // resolvedJid: for @lid messages that carry remoteJidAlt, use it to group
     // the chat under the phone-based JID instead of creating a duplicate entry.
+    // LidContact: fallback join for contacts saved with @lid before the fix.
     const results = await this.prismaRepository.$queryRaw`
       WITH rankedMessages AS (
         SELECT DISTINCT ON (COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid'))
-          "Contact"."id" as "contactId",
+          COALESCE("Contact"."id", "LidContact"."id") as "contactId",
           COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid') as "remoteJid",
           CASE 
             WHEN COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid') LIKE '%@g.us'
-              THEN COALESCE("Chat"."name", "Contact"."pushName")
-            ELSE COALESCE("Contact"."pushName", "Message"."pushName")
+              THEN COALESCE("Chat"."name", "LidChat"."name", "Contact"."pushName", "LidContact"."pushName")
+            ELSE COALESCE("Contact"."pushName", "LidContact"."pushName", "Message"."pushName")
           END as "pushName",
-          "Contact"."profilePicUrl",
+          COALESCE("Contact"."profilePicUrl", "LidContact"."profilePicUrl") as "profilePicUrl",
           COALESCE(
             to_timestamp("Message"."messageTimestamp"::double precision), 
-            "Contact"."updatedAt"
+            "Contact"."updatedAt",
+            "LidContact"."updatedAt"
           ) as "updatedAt",
-          "Chat"."name" as "chatName",
-          "Chat"."createdAt" as "windowStart",
-          "Chat"."createdAt" + INTERVAL '24 hours' as "windowExpires",
-          "Chat"."unreadMessages" as "unreadMessages",
-          CASE WHEN "Chat"."createdAt" + INTERVAL '24 hours' > NOW() THEN true ELSE false END as "windowActive",
+          COALESCE("Chat"."name", "LidChat"."name") as "chatName",
+          COALESCE("Chat"."createdAt", "LidChat"."createdAt") as "windowStart",
+          COALESCE("Chat"."createdAt", "LidChat"."createdAt") + INTERVAL '24 hours' as "windowExpires",
+          COALESCE("Chat"."unreadMessages", "LidChat"."unreadMessages") as "unreadMessages",
+          CASE WHEN COALESCE("Chat"."createdAt", "LidChat"."createdAt") + INTERVAL '24 hours' > NOW() THEN true ELSE false END as "windowActive",
           "Message"."id" AS "lastMessageId",
           "Message"."key" AS "lastMessage_key",
           CASE
@@ -802,9 +804,17 @@ export class ChannelStartupService {
         LEFT JOIN "Contact"
           ON "Contact"."remoteJid" = COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid')
           AND "Contact"."instanceId" = "Message"."instanceId"
+        LEFT JOIN "Contact" AS "LidContact"
+          ON "LidContact"."remoteJid" = "Message"."key"->>'remoteJid'
+          AND "LidContact"."instanceId" = "Message"."instanceId"
+          AND "Contact"."id" IS NULL
         LEFT JOIN "Chat"
           ON "Chat"."remoteJid" = COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid')
           AND "Chat"."instanceId" = "Message"."instanceId"
+        LEFT JOIN "Chat" AS "LidChat"
+          ON "LidChat"."remoteJid" = "Message"."key"->>'remoteJid'
+          AND "LidChat"."instanceId" = "Message"."instanceId"
+          AND "Chat"."id" IS NULL
         WHERE "Message"."instanceId" = ${this.instanceId}
         ${remoteJid ? Prisma.sql`AND COALESCE("Message"."key"->>'remoteJidAlt', "Message"."key"->>'remoteJid') = ${remoteJid}` : Prisma.sql``}
         ${timestampFilter}
