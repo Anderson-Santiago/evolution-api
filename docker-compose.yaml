@@ -40,7 +40,7 @@ services:
 
   evolution-postgres:
     container_name: evolution-postgres
-    image: postgres:17
+    image: pgvector/pgvector:pg17
     restart: always
     env_file:
       - .env
