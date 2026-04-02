@@ -16,16 +16,23 @@ if [[ "$DATABASE_PROVIDER" == "postgresql" || "$DATABASE_PROVIDER" == "mysql" ||
     DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
     DB_PORT="${DB_PORT:-5432}"
     export DB_HOST DB_PORT
+
+    # Write wait script to temp file (avoids bash quoting issues with node -e)
+    cat > /tmp/wait-for-db.js <<'JSEOF'
+var net = require("net");
+var host = process.env.DB_HOST;
+var port = parseInt(process.env.DB_PORT) || 5432;
+var s = net.createConnection({host: host, port: port});
+s.on("connect", function() { s.end(); process.exit(0); });
+s.on("error", function() { process.exit(1); });
+setTimeout(function() { process.exit(1); }, 2000);
+JSEOF
+
     MAX_RETRIES=30
     RETRY_COUNT=0
     echo "Waiting for database at $DB_HOST:$DB_PORT..."
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-        if node -e "
-          var s = require('net').createConnection({host: process.env.DB_HOST, port: parseInt(process.env.DB_PORT)});
-          s.on('connect', function() { s.end(); process.exit(0); });
-          s.on('error', function() { process.exit(1); });
-          setTimeout(function() { process.exit(1); }, 2000);
-        " 2>/dev/null; then
+        if node /tmp/wait-for-db.js; then
             echo "Database is ready!"
             break
         fi
@@ -33,6 +40,7 @@ if [[ "$DATABASE_PROVIDER" == "postgresql" || "$DATABASE_PROVIDER" == "mysql" ||
         echo "Database not ready yet (attempt $RETRY_COUNT/$MAX_RETRIES)..."
         sleep 2
     done
+    rm -f /tmp/wait-for-db.js
     if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
         echo "Error: Database at $DB_HOST:$DB_PORT not reachable after $MAX_RETRIES attempts"
         exit 1
