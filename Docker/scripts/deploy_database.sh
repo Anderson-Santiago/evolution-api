@@ -19,7 +19,7 @@ if [[ "$DATABASE_PROVIDER" == "postgresql" || "$DATABASE_PROVIDER" == "mysql" ||
     RETRY_COUNT=0
     echo "Waiting for database at $DB_HOST:$DB_PORT..."
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-        if nc -z "$DB_HOST" "$DB_PORT" 2>/dev/null || (echo > /dev/tcp/"$DB_HOST"/"$DB_PORT") 2>/dev/null; then
+        if node -e "const s=require('net').createConnection({host:'$DB_HOST',port:$DB_PORT});s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),2000)" 2>/dev/null; then
             echo "Database is ready!"
             break
         fi
