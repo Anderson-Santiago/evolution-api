@@ -15,11 +15,17 @@ if [[ "$DATABASE_PROVIDER" == "postgresql" || "$DATABASE_PROVIDER" == "mysql" ||
     DB_HOST=$(echo "$DATABASE_URL" | sed -n 's|.*@\([^:/]*\).*|\1|p')
     DB_PORT=$(echo "$DATABASE_URL" | sed -n 's|.*:\([0-9]*\)/.*|\1|p')
     DB_PORT="${DB_PORT:-5432}"
+    export DB_HOST DB_PORT
     MAX_RETRIES=30
     RETRY_COUNT=0
     echo "Waiting for database at $DB_HOST:$DB_PORT..."
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-        if node -e "const s=require('net').createConnection({host:'$DB_HOST',port:$DB_PORT});s.on('connect',()=>{s.end();process.exit(0)});s.on('error',()=>process.exit(1));setTimeout(()=>process.exit(1),2000)" 2>/dev/null; then
+        if node -e "
+          var s = require('net').createConnection({host: process.env.DB_HOST, port: parseInt(process.env.DB_PORT)});
+          s.on('connect', function() { s.end(); process.exit(0); });
+          s.on('error', function() { process.exit(1); });
+          setTimeout(function() { process.exit(1); }, 2000);
+        " 2>/dev/null; then
             echo "Database is ready!"
             break
         fi
