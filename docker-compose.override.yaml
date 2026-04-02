@@ -13,6 +13,9 @@
 services:
   api:
     image: ghcr.io/anderson-santiago/evolution-api:latest
+    volumes:
+      - evolution_instances:/evolution/instances
+      - ./Docker/scripts/deploy_database.sh:/evolution/Docker/scripts/deploy_database.sh:ro
     networks:
       - evolution-net
     # Remove dokploy-network do servico api
