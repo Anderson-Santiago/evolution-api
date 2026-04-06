@@ -3754,6 +3754,25 @@ export class BaileysStartupService extends ChannelStartupService {
         }
       });
       await this.client.readMessages(keys);
+
+      // Zero unread count for affected chats in the database
+      const affectedJids = new Set(keys.map((k) => k.remoteJid).filter(Boolean));
+      for (const jid of affectedJids) {
+        try {
+          const chat = await this.prismaRepository.chat.findFirst({
+            where: { instanceId: this.instanceId, remoteJid: jid },
+          });
+          if (chat && chat.unreadMessages > 0) {
+            await this.prismaRepository.chat.update({
+              where: { id: chat.id },
+              data: { unreadMessages: 0 },
+            });
+          }
+        } catch {
+          // Non-critical — don't fail the read receipt over a DB update
+        }
+      }
+
       return { message: 'Read messages', read: 'success' };
     } catch (error) {
       throw new InternalServerErrorException('Read messages fail', error.toString());
